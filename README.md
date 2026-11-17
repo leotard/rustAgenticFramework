@@ -22,13 +22,24 @@ RustForge has **two pillars**:
 | [`docs/prose-and-visuals.md`](docs/prose-and-visuals.md) | Writing and diagram rules (Orwell's six rules + the "show-me" visual vocabulary). |
 | [`docs/coordination.md`](docs/coordination.md) | Working across many repos; the `AGENTS.md` pattern and coordination repo. |
 | [`docs/12-factor-agents-rust.md`](docs/12-factor-agents-rust.md) | **Pillar B:** the 12 (+1) agent-engineering principles, each mapped to Rust with code. |
-| [`scaffold/`](scaffold/) | A ready-to-clone Rust project: `Cargo.toml`, `rust-toolchain.toml`, CI, `AGENTS.md`, and an `.agents/` artifacts directory. |
+| [`scaffold/`](scaffold/) | A ready-to-clone Rust project with a full runnable 12-factor implementation: `core/`, `tools/`, `agents/`, `runtime/`, `triggers/`, `prompts/`, plus CI and `AGENTS.md`. |
+| [`agents/`](agents/) | Host-level specialized agent definitions (planning, research, design, review, deploy, triage, implement, summarize, show-me, visual-pr, improve-agents-md) — install into Claude Code `.claude/agents/` or Codex. |
 | [`templates/`](templates/) | Fill-in-the-blank artifact templates (research, PRD, TDD, outline, …). |
 | [`skills/`](skills/) | Installable agent skills: `rpi`, `show-me`, `visual-pr`, `improve-agents-md`. |
 
 ---
 
 ## Quickstart
+
+### Start with zero rewrite
+
+Skip greenfield setup: the kit ships a complete, runnable scaffold, and a set of specialized agents in [`agents/`](agents/) — planning, research, design, review, deploy, triage, implement, summarize, show-me, visual-pr, and improve-agents-md. Install them into Claude Code's `.claude/agents/` (or Codex), then run the scaffold:
+
+```bash
+cargo run -- run <id>     # run an agent thread
+cargo run -- resume <id>  # resume an existing thread
+cargo run -- webhook      # start the axum webhook
+```
 
 ### 1. Start a new project
 
@@ -44,8 +55,10 @@ cargo build
 Copy the framework itself into the repo so your agent always has it:
 
 ```bash
-cp -R ../rustforge/METHODOLOGY.md ../rustforge/docs ../rustforge/templates ./
+cp -R ../rustforge/METHODOLOGY.md ../rustforge/docs ../rustforge/templates ../rustforge/agents ../rustforge/skills ./
 ```
+
+(`prompts/` already ships inside `scaffold/`, so the runtime agent prompts come along automatically.)
 
 ### 2. Give your agent a memory
 

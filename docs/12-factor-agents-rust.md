@@ -30,9 +30,31 @@ The original is language-agnostic (its examples are TypeScript/Python). This pag
 
 *(13 is an appendix in the original.)*
 
+## Factor → file index
+
+| # | Factor | Where it lives in the scaffold |
+| --- | --- | --- |
+| 1 | Natural language → tool calls | `scaffold/src/core/step.rs` (`Step`), `scaffold/src/core/engine.rs` (`DecisionEngine`) |
+| 2 | Own your prompts | `scaffold/prompts/*.md`, `scaffold/src/core/prompt.rs` (`include_str!`) |
+| 3 | Own your context window | `scaffold/src/core/thread.rs` (`Thread::to_context()`) |
+| 4 | Tools are structured outputs | `scaffold/src/core/step.rs`, `scaffold/src/tools/mod.rs` (`ToolExecutor` → `serde_json::Value`) |
+| 5 | Unify execution & business state | `scaffold/src/core/event.rs` (`Event`), `scaffold/src/core/thread.rs` (`Thread`) |
+| 6 | Launch/pause/resume | `scaffold/src/core/store.rs` (`Store`/`FileStore`), `scaffold/src/runtime/control.rs`, `scaffold/src/triggers/cli.rs` |
+| 7 | Contact humans with tool calls | `scaffold/src/tools/human.rs`, `Step::RequestHumanInput`, `Event::HumanResponse` |
+| 8 | Own your control flow | `scaffold/src/runtime/control.rs` (`run`, `ControlFlow`) |
+| 9 | Compact errors into context | `scaffold/src/core/error.rs` (`AgentError`), retry cap in `scaffold/src/runtime/control.rs` |
+| 10 | Small focused agents | `scaffold/src/agents/*.rs` + top-level `agents/*.md` |
+| 11 | Trigger from anywhere | `scaffold/src/triggers/cli.rs`, `scaffold/src/triggers/webhook.rs` (axum) |
+| 12 | Stateless reducer | `scaffold/src/core/reducer.rs` (`reduce`) |
+| 13* | Pre-fetch context | `scaffold/src/tools/git.rs` (`prefetch_tags`) |
+
+The `scaffold/` directory ships a runnable Rust skeleton that implements all 12 factors in the type system and control flow, with a scripted `DecisionEngine` as a stand-in for the LLM (swap in your own model client to go live). Each factor below is backed by a real file and type, not just a sketch. The matching host-level agent definitions live in the top-level `agents/` directory (`agents/*.md`), and the runtime agents' prompts live in `scaffold/prompts/`.
+
 ---
 
 ## Factor 1 — Natural language to tool calls
+
+**In the scaffold:** `scaffold/src/core/step.rs` (`Step` enum), `scaffold/src/core/engine.rs` (`DecisionEngine` trait).
 
 The atomic move: translate a phrase into a structured object, then let deterministic code act on it.
 
@@ -59,22 +81,14 @@ The `#[serde(tag = "intent")]` attribute makes the JSON carry a discriminant fie
 
 ## Factor 2 — Own your prompts
 
+**In the scaffold:** `scaffold/prompts/*.md`, `scaffold/src/core/prompt.rs` (`include_str!`).
+
 Don't outsource prompt engineering to a framework's `Agent(role=..., goal=...)` black box. Treat prompts as first-class, versioned code you can test and tune.
 
 ```rust
-// prompts/deploy.rs — checked into the repo, diffed, reviewed like code
-pub const DETERMINE_NEXT_STEP: &str = r#"
-You manage deployments for frontend and backend systems.
-Before deploying, check: environment (staging vs production),
-the tag to deploy, and current system status.
-Use deploy_backend, deploy_frontend, check_deployment_status.
-For sensitive deployments, use request_approval.
-
-Here is what has happened so far:
-{{ thread }}
-
-What should the next step be?
-"#;
+// prompts/deploy.md — checked into the repo, diffed, reviewed like code.
+// core/prompt.rs compiles it into the binary:
+pub const DEPLOY_PROMPT: &str = include_str!("../../prompts/deploy.md");
 ```
 
 Keep prompts in their own module (or files under `prompts/`), render them with a template engine (or plain `format!`), and write unit tests that assert the rendered prompt contains the required instructions. A prompt you can't `cargo test` is a prompt you can't ship with confidence.
@@ -82,6 +96,8 @@ Keep prompts in their own module (or files under `prompts/`), render them with a
 ---
 
 ## Factor 3 — Own your context window
+
+**In the scaffold:** `scaffold/src/core/thread.rs` (`Thread::to_context()`).
 
 At any point, your input to the LLM is *"here's what happened so far, what's next?"* The context window is your primary interface to the model — engineer it deliberately instead of accepting the default chat-message format.
 
@@ -96,18 +112,13 @@ pub enum Event {
     Error { message: String },
 }
 
-impl Event {
+impl Thread {
     pub fn to_context(&self) -> String {
-        match self {
-            Event::ListGitTagsResult { tags } => {
-                let body = tags.iter()
-                    .map(|t| format!("  - {} ({})", t.name, t.commit))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                format!("<list_git_tags_result>\n{body}\n</list_git_tags_result>")
-            }
-            _ => format!("<{}>\n{}\n</{}>", self.kind(), self.body(), self.kind()),
-        }
+        self.events
+            .iter()
+            .map(render_event)
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 ```
@@ -117,6 +128,8 @@ You can pack the whole thread into a single message, use a compact XML/YAML-ish 
 ---
 
 ## Factor 4 — Tools are just structured outputs
+
+**In the scaffold:** `scaffold/src/core/step.rs`, `scaffold/src/tools/mod.rs` (`ToolExecutor` → `serde_json::Value`).
 
 A "tool" is just JSON the model outputs that triggers deterministic code. Model the tool's *arguments* as a Rust type; `serde` turns the JSON into a value you can `match` on.
 
@@ -150,6 +163,8 @@ The LLM decides *what*; your code decides *how*. "Tool call" no longer has to me
 
 ## Factor 5 — Unify execution state and business state
 
+**In the scaffold:** `scaffold/src/core/event.rs` (`Event` enum), `scaffold/src/core/thread.rs` (`Thread`).
+
 Don't maintain a parallel "execution state" (current step, retries, waiting) beside your "business state" (the history). Make the history the single source of truth — a list of `Event`s from which you can infer everything.
 
 ```rust
@@ -177,6 +192,8 @@ One source of truth means trivial serialization (`serde_json::to_string`), trivi
 
 ## Factor 6 — Launch / Pause / Resume with simple APIs
 
+**In the scaffold:** `scaffold/src/core/store.rs` (`Store`/`FileStore`), `scaffold/src/runtime/control.rs`, `scaffold/src/triggers/cli.rs`.
+
 Agents are just programs. Give them the same lifecycle you'd expect from any job: launch, query, pause, resume, stop.
 
 ```rust
@@ -195,6 +212,8 @@ The hard-won requirement: you must be able to pause **between tool selection and
 ---
 
 ## Factor 7 — Contact humans with tool calls
+
+**In the scaffold:** `scaffold/src/tools/human.rs`, `Step::RequestHumanInput`, `Event::HumanResponse`.
 
 Human contact is just another tool. Model it explicitly so an agent can *ask* — and so your control flow can break out of the loop and wait.
 
@@ -233,6 +252,8 @@ Because the request is a typed event, the *response* can also be a typed event (
 
 ## Factor 8 — Own your control flow
 
+**In the scaffold:** `scaffold/src/runtime/control.rs` (`run`, `ControlFlow`).
+
 Build the loop yourself so *you* decide what breaks out, what continues, and what needs approval.
 
 ```rust
@@ -267,6 +288,8 @@ Owning this loop is what unlocks interruption *between* selection and invocation
 ---
 
 ## Factor 9 — Compact errors into context
+
+**In the scaffold:** `scaffold/src/core/error.rs` (`AgentError`, thiserror) plus the retry cap in `scaffold/src/runtime/control.rs`.
 
 Feed failures back to the model as data so it can self-correct — but cap the retries so it can't spin out.
 
@@ -309,6 +332,8 @@ pub fn run_with_retry(mut thread: Thread) -> Result<AgentState, AppError> {
 
 ## Factor 10 — Small, focused agents
 
+**In the scaffold:** `scaffold/src/agents/*.rs` (Rust) plus the top-level `agents/*.md` (host definitions).
+
 A monolithic agent with a 100-step context window gets lost. Build small agents that do one thing in 3–10 steps, and let them be one building block in a larger, mostly-deterministic system.
 
 In Rust this falls out naturally:
@@ -326,6 +351,8 @@ Each agent is a crate (or a module) with a narrow prompt, a small tool set, and 
 ---
 
 ## Factor 11 — Trigger from anywhere, meet users where they are
+
+**In the scaffold:** `scaffold/src/triggers/cli.rs`, `scaffold/src/triggers/webhook.rs` (axum).
 
 The agent should be launchable from Slack, email, SMS, a cron, a webhook, a CLI — and should answer back on the same channel. Decouple the *trigger* from the *core* with one entrypoint:
 
@@ -355,6 +382,8 @@ This is what makes "outer-loop" agents possible: an agent kicked off by an event
 
 ## Factor 12 — Make your agent a stateless reducer
 
+**In the scaffold:** `scaffold/src/core/reducer.rs` (`reduce`).
+
 The punchline. Fold the whole loop into a pure function from `(state, event)` to `state`:
 
 ```rust
@@ -381,6 +410,8 @@ Why bother? A pure reducer is the easiest possible thing to test (no mocks — j
 ---
 
 ## Factor 13 (appendix) — Pre-fetch the context you'll need
+
+**In the scaffold:** `scaffold/src/tools/git.rs` (`prefetch_tags`).
 
 > If you already know which tools the model will call, just call them **deterministically** and let the model do the hard part of using their outputs.
 

@@ -26,15 +26,22 @@ cargo run                   # run the binary
 ## Layout
 
 ```text
+prompts/            # owned system prompts (factor 2)
 src/
-├── lib.rs      # library root (public API lives here)
-├── main.rs     # thin binary entrypoint
-└── ...         # one module per responsibility
+├── main.rs         # thin binary: CLI + webhook entrypoint
+├── lib.rs          # library root, re-exports the framework
+├── core/           # step, event, thread, reducer, error, store, prompt, engine, agent
+├── tools/          # ToolExecutor trait + git + human
+├── agents/         # small focused agents: deploy, triage, summarize, review
+├── runtime/        # the control-flow loop (control.rs)
+└── triggers/       # cli.rs + webhook.rs (factor 11)
 ```
 
 ## Workflow (RustForge)
 
 Use the workflow in `METHODOLOGY.md`: **Questions → Research → Design → Structure → Plan → Implement**.
+
+Specialized host-level agents live in the repo root's `agents/` directory; the runtime agents' system prompts live in this scaffold's `prompts/` directory.
 
 - Before writing code, produce the phase's artifact under `.agents/artifacts/<task-slug>/` and get it reviewed.
 - Number new documents `NN-<type>-<desc>.md`; update existing documents in place.

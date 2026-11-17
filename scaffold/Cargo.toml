@@ -6,13 +6,15 @@ description = "A Rust project scaffold that follows the RustForge workflow."
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-# Errors as types: thiserror for libraries, anyhow for binaries.
+# Errors as types: thiserror for libraries, anyhow for binaries (factor 9).
 thiserror = "2"
-# Structured data: tool calls, events, and state all serialize through serde.
+anyhow = "1"
+# Structured data: tool calls, events, and state all serialize through serde (factors 1, 4, 5).
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-[dev-dependencies]
+# Async runtime + web framework for the webhook trigger (factor 11).
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+axum = "0.8"
 
 [profile.release]
 lto = true

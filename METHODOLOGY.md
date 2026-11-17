@@ -187,7 +187,7 @@ Implement from the outline (or from the documents if you skipped it). Delegate t
 
 ## 7. The subagents
 
-The `rpi` skill coordinates a small set of read-only subagents. The full prompts are in `skills/rpi/references/subagents/`. In brief:
+The `rpi` skill coordinates a small set of read-only subagents. The full prompts are in `skills/rpi/references/subagents.md`. In brief:
 
 | Subagent | Job |
 | --- | --- |
