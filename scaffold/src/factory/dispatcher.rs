@@ -151,3 +151,12 @@ pub fn dispatcher_from_choice(choice: &str) -> Box<dyn Dispatcher> {
         _ => Box::new(ManualDispatcher),
     }
 }
+
+/// Choose a dispatcher from the `RUSTFORGE_AGENT` env var (`claude`/`codex`/`none`);
+/// defaults to manual when unset. Used by non-interactive triggers (webhook).
+pub fn dispatcher_from_env() -> Box<dyn Dispatcher> {
+    match std::env::var("RUSTFORGE_AGENT") {
+        Ok(v) => dispatcher_from_choice(&v),
+        Err(_) => Box::new(ManualDispatcher),
+    }
+}

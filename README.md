@@ -45,6 +45,8 @@ cargo run -- factory "Add daily goal" --dry-run    # software factory: feature -
 cargo run -- factory-approve add-daily-goal --dry-run  # approve the gated merge
 ```
 
+> The `factory` command is the demo entry point. In normal use the **orchestrator agent fires it** (or `POST /factory` on the webhook) — a human doesn't type it; the human only approves the merge.
+
 ### 1. Start a new project
 
 Copy the scaffold:

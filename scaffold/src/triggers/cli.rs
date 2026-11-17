@@ -11,8 +11,8 @@
 use crate::agents::deploy::DeployAgent;
 use crate::core::{Event, FileStore, ScriptedEngine, Step, Store, Thread};
 use crate::factory::{
-    dispatcher_from_choice, run_pipeline, Dispatcher, DryRunDispatcher, Feature, FeatureStore,
-    GitHub, GitHubCli, ManualDispatcher, StubGitHub,
+    dispatcher_from_choice, run_pipeline, slugify, Dispatcher, DryRunDispatcher, Feature,
+    FeatureStore, GitHub, GitHubCli, ManualDispatcher, StubGitHub,
 };
 use crate::runtime::{run, ControlFlow};
 use crate::tools::git::GitTools;
@@ -168,19 +168,4 @@ fn print_factory(flow: ControlFlow, feature: &Feature) {
         ),
         ControlFlow::Continue => println!("factory continuing for {}", feature.id),
     }
-}
-
-fn slugify(s: &str) -> String {
-    let mut out = String::new();
-    let mut prev_dash = false;
-    for c in s.chars() {
-        if c.is_alphanumeric() {
-            out.push(c.to_ascii_lowercase());
-            prev_dash = false;
-        } else if !prev_dash {
-            out.push('-');
-            prev_dash = true;
-        }
-    }
-    out.trim_matches('-').to_string()
 }

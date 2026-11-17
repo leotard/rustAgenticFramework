@@ -22,7 +22,8 @@ use crate::runtime::ControlFlow;
 pub mod dispatcher;
 
 pub use dispatcher::{
-    dispatcher_from_choice, ClaudeCode, Codex, Dispatcher, DryRunDispatcher, ManualDispatcher,
+    dispatcher_from_choice, dispatcher_from_env, ClaudeCode, Codex, Dispatcher, DryRunDispatcher,
+    ManualDispatcher,
 };
 
 /// The pipeline stages. Opening a PR is routine; merging is high-stakes.
@@ -101,6 +102,22 @@ impl Feature {
     pub fn approve_merge(&mut self) {
         self.merge_approved = true;
     }
+}
+
+/// Convert a free-text title into a kebab-case id.
+pub fn slugify(s: &str) -> String {
+    let mut out = String::new();
+    let mut prev_dash = false;
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            prev_dash = false;
+        } else if !prev_dash {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
 }
 
 /// Factor 4 — git/gh operations return structured results, not side effects.
