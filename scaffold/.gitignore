@@ -1,0 +1,9 @@
+/target
+Cargo.lock
+*.rs.bk
+
+# Working artifacts (RPI documents). Recommended: do not commit the docs —
+# but keep the directory present via the .gitkeep marker.
+.agents/*
+!.agents/artifacts/
+!.agents/artifacts/.gitkeep

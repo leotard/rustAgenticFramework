@@ -1,0 +1,8 @@
+# Clippy lint config for the RustForge scaffold.
+# -D warnings in CI means any of these fail the build.
+
+# No unwrap()/expect() in committed code without a deliberate allowance.
+# unwrap_used = "deny"  # enable once the codebase is lint-clean
+
+# Keep it a library-first crate: public items are a promise.
+# missing_docs = "warn"
