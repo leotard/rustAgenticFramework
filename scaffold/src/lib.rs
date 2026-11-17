@@ -5,6 +5,7 @@
 
 pub mod agents;
 pub mod core;
+pub mod factory;
 pub mod runtime;
 pub mod tools;
 pub mod triggers;

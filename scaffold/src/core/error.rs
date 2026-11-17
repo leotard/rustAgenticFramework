@@ -14,6 +14,9 @@ pub enum AgentError {
     #[error("store error: {0}")]
     Store(String),
 
+    #[error("tool error: {0}")]
+    Tool(String),
+
     #[error("no next step available (decision engine exhausted)")]
     MissingEngine,
 }

@@ -17,6 +17,7 @@ Host-level specialized agent definitions you can install into your AI coding age
 | `show-me` | Visual explanations: diagrams, code-shape sketches, diffs, call trees. |
 | `visual-pr` | Concise PR description with a visual outline. |
 | `improve-agents-md` | Rewrite AGENTS.md with `<important if="...">` blocks. |
+| `orchestrator` | The factory: drive a feature through the pipeline and open the PR; gate the merge on human approval. |
 
 ## Install — Claude Code
 

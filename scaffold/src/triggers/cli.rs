@@ -1,4 +1,8 @@
-//! Factor 11 — CLI trigger. `cargo run -- [run|resume|pause] <id>`.
+//! Factor 11 — CLI trigger.
+//!
+//! Agent loop:  `cargo run -- [run|resume|pause] <id>`
+//! Factory:     `cargo run -- factory <title> [--dry-run]` and
+//!              `cargo run -- factory-approve <id> [--dry-run]`
 //!
 //! The `run` path uses a `ScriptedEngine` (a deterministic stand-in for the LLM)
 //! so the whole pipeline runs end-to-end without a model API key. Swap in your
@@ -6,6 +10,7 @@
 
 use crate::agents::deploy::DeployAgent;
 use crate::core::{Event, FileStore, ScriptedEngine, Step, Store, Thread};
+use crate::factory::{run_pipeline, Feature, FeatureStore, GitHubCli, StubGitHub};
 use crate::runtime::{run, ControlFlow};
 use crate::tools::git::GitTools;
 
@@ -62,8 +67,44 @@ pub fn run_main(args: &[String]) -> anyhow::Result<()> {
             store.save(id, &thread)?;
             println!("saved {id}");
         }
+        Some("factory") => {
+            let title = args.get(1).cloned().unwrap_or_else(|| "New feature".into());
+            let id = slugify(&title);
+            let dry_run = args.iter().any(|a| a == "--dry-run");
+
+            let store = FeatureStore::new(".agents/factory");
+            let mut feature = store
+                .load(&id)
+                .unwrap_or_else(|_| Feature::new(&id, &title));
+
+            let flow = if dry_run {
+                run_pipeline(&mut feature, &StubGitHub)?
+            } else {
+                run_pipeline(&mut feature, &GitHubCli)?
+            };
+            store.save(&feature)?;
+            print_factory(flow, &feature);
+        }
+        Some("factory-approve") => {
+            let id = slugify(args.get(1).map(String::as_str).unwrap_or("new-feature"));
+            let dry_run = args.iter().any(|a| a == "--dry-run");
+
+            let store = FeatureStore::new(".agents/factory");
+            let mut feature = store.load(&id)?;
+            feature.approve_merge();
+
+            let flow = if dry_run {
+                run_pipeline(&mut feature, &StubGitHub)?
+            } else {
+                run_pipeline(&mut feature, &GitHubCli)?
+            };
+            store.save(&feature)?;
+            print_factory(flow, &feature);
+        }
         _ => {
-            println!("usage: cargo run -- [run|resume|pause] <id>   or   cargo run -- webhook");
+            println!(
+                "usage:\n  cargo run -- [run|resume|pause] <id>\n  cargo run -- factory <title> [--dry-run]\n  cargo run -- factory-approve <id> [--dry-run]\n  cargo run -- webhook"
+            );
         }
     }
 
@@ -78,4 +119,31 @@ fn print_flow(flow: ControlFlow, id: &str, thread: &Thread) {
         ),
         ControlFlow::Continue => println!("continuing {id}"),
     }
+}
+
+fn print_factory(flow: ControlFlow, feature: &Feature) {
+    let pr = feature.pr_url.as_deref().unwrap_or("<no pr>");
+    match flow {
+        ControlFlow::Done => println!("factory done for {}: merged ({pr})", feature.id),
+        ControlFlow::AwaitHuman => println!(
+            "factory paused for {}: PR {pr} is open — merge needs approval.\n  approve with: cargo run -- factory-approve {}",
+            feature.id, feature.id
+        ),
+        ControlFlow::Continue => println!("factory continuing for {}", feature.id),
+    }
+}
+
+fn slugify(s: &str) -> String {
+    let mut out = String::new();
+    let mut prev_dash = false;
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            prev_dash = false;
+        } else if !prev_dash {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
 }

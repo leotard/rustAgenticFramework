@@ -33,6 +33,7 @@ src/
 ├── core/           # step, event, thread, reducer, error, store, prompt, engine, agent
 ├── tools/          # ToolExecutor trait + git + human
 ├── agents/         # small focused agents: deploy, triage, summarize, review
+├── factory/        # the software factory: feature -> PR -> gated merge
 ├── runtime/        # the control-flow loop (control.rs)
 └── triggers/       # cli.rs + webhook.rs (factor 11)
 ```

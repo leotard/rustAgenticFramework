@@ -41,7 +41,7 @@ The original is language-agnostic (its examples are TypeScript/Python). This pag
 | 5 | Unify execution & business state | `scaffold/src/core/event.rs` (`Event`), `scaffold/src/core/thread.rs` (`Thread`) |
 | 6 | Launch/pause/resume | `scaffold/src/core/store.rs` (`Store`/`FileStore`), `scaffold/src/runtime/control.rs`, `scaffold/src/triggers/cli.rs` |
 | 7 | Contact humans with tool calls | `scaffold/src/tools/human.rs`, `Step::RequestHumanInput`, `Event::HumanResponse` |
-| 8 | Own your control flow | `scaffold/src/runtime/control.rs` (`run`, `ControlFlow`) |
+| 8 | Own your control flow | `scaffold/src/runtime/control.rs` (`run`, `ControlFlow`), `scaffold/src/factory/mod.rs` (software factory) |
 | 9 | Compact errors into context | `scaffold/src/core/error.rs` (`AgentError`), retry cap in `scaffold/src/runtime/control.rs` |
 | 10 | Small focused agents | `scaffold/src/agents/*.rs` + top-level `agents/*.md` |
 | 11 | Trigger from anywhere | `scaffold/src/triggers/cli.rs`, `scaffold/src/triggers/webhook.rs` (axum) |
@@ -252,7 +252,7 @@ Because the request is a typed event, the *response* can also be a typed event (
 
 ## Factor 8 — Own your control flow
 
-**In the scaffold:** `scaffold/src/runtime/control.rs` (`run`, `ControlFlow`).
+**In the scaffold:** `scaffold/src/runtime/control.rs` (`run`, `ControlFlow`), and one level up in `scaffold/src/factory/mod.rs` (`run_pipeline`).
 
 Build the loop yourself so *you* decide what breaks out, what continues, and what needs approval.
 
@@ -284,6 +284,8 @@ pub fn run(mut thread: Thread) -> Result<AgentState, AppError> {
 ```
 
 Owning this loop is what unlocks interruption *between* selection and invocation, caching/summarizing tool results, LLM-as-judge, context compaction, rate limiting, and durable sleeps. No framework between you and the `match`.
+
+The scaffold applies this pattern one level *up*: `scaffold/src/factory/mod.rs` is a **software factory** — a `run_pipeline` loop that drives a feature request through Research → Design → Outline → Implement → open PR → merge, dispatching the focused agents at each stage. Opening a PR is routine and runs automatically; **merging is the high-stakes action** and pauses for a human's approval.
 
 ---
 
