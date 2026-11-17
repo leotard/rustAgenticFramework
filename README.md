@@ -39,7 +39,9 @@ Skip greenfield setup: the kit ships a complete, runnable scaffold, and a set of
 cargo run -- run <id>     # run an agent thread
 cargo run -- resume <id>  # resume an existing thread
 cargo run -- webhook      # start the axum webhook
-cargo run -- factory "Add daily goal" --dry-run   # software factory: feature -> PR -> gated merge
+cargo run -- factory "Add daily goal"              # asks which agent (claude/codex/none)
+cargo run -- factory "Add daily goal" --agent claude
+cargo run -- factory "Add daily goal" --dry-run    # software factory: feature -> PR -> gated merge
 cargo run -- factory-approve add-daily-goal --dry-run  # approve the gated merge
 ```
 

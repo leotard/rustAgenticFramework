@@ -1,7 +1,7 @@
 //! Factor 11 — CLI trigger.
 //!
 //! Agent loop:  `cargo run -- [run|resume|pause] <id>`
-//! Factory:     `cargo run -- factory <title> [--dry-run]` and
+//! Factory:     `cargo run -- factory <title> [--agent claude|codex|none] [--dry-run]`
 //!              `cargo run -- factory-approve <id> [--dry-run]`
 //!
 //! The `run` path uses a `ScriptedEngine` (a deterministic stand-in for the LLM)
@@ -10,7 +10,10 @@
 
 use crate::agents::deploy::DeployAgent;
 use crate::core::{Event, FileStore, ScriptedEngine, Step, Store, Thread};
-use crate::factory::{run_pipeline, Feature, FeatureStore, GitHubCli, StubGitHub};
+use crate::factory::{
+    dispatcher_from_choice, run_pipeline, Dispatcher, DryRunDispatcher, Feature, FeatureStore,
+    GitHub, GitHubCli, ManualDispatcher, StubGitHub,
+};
 use crate::runtime::{run, ControlFlow};
 use crate::tools::git::GitTools;
 
@@ -71,17 +74,29 @@ pub fn run_main(args: &[String]) -> anyhow::Result<()> {
             let title = args.get(1).cloned().unwrap_or_else(|| "New feature".into());
             let id = slugify(&title);
             let dry_run = args.iter().any(|a| a == "--dry-run");
+            let agent_choice = flag_value(args, "--agent");
 
             let store = FeatureStore::new(".agents/factory");
             let mut feature = store
                 .load(&id)
                 .unwrap_or_else(|_| Feature::new(&id, &title));
 
-            let flow = if dry_run {
-                run_pipeline(&mut feature, &StubGitHub)?
+            let github: Box<dyn GitHub> = if dry_run {
+                Box::new(StubGitHub)
             } else {
-                run_pipeline(&mut feature, &GitHubCli)?
+                Box::new(GitHubCli)
             };
+            let dispatcher: Box<dyn Dispatcher> = if dry_run {
+                Box::new(DryRunDispatcher)
+            } else {
+                let choice = match agent_choice {
+                    Some(c) => c,
+                    None => ask_agent()?,
+                };
+                dispatcher_from_choice(&choice)
+            };
+
+            let flow = run_pipeline(&mut feature, github.as_ref(), dispatcher.as_ref())?;
             store.save(&feature)?;
             print_factory(flow, &feature);
         }
@@ -93,22 +108,44 @@ pub fn run_main(args: &[String]) -> anyhow::Result<()> {
             let mut feature = store.load(&id)?;
             feature.approve_merge();
 
-            let flow = if dry_run {
-                run_pipeline(&mut feature, &StubGitHub)?
+            // Only the merge remains, so no agent is dispatched here.
+            let github: Box<dyn GitHub> = if dry_run {
+                Box::new(StubGitHub)
             } else {
-                run_pipeline(&mut feature, &GitHubCli)?
+                Box::new(GitHubCli)
             };
+            let dispatcher = ManualDispatcher;
+
+            let flow = run_pipeline(&mut feature, github.as_ref(), &dispatcher)?;
             store.save(&feature)?;
             print_factory(flow, &feature);
         }
         _ => {
             println!(
-                "usage:\n  cargo run -- [run|resume|pause] <id>\n  cargo run -- factory <title> [--dry-run]\n  cargo run -- factory-approve <id> [--dry-run]\n  cargo run -- webhook"
+                "usage:\n  cargo run -- [run|resume|pause] <id>\n  cargo run -- factory <title> [--agent claude|codex|none] [--dry-run]\n  cargo run -- factory-approve <id> [--dry-run]\n  cargo run -- webhook"
             );
         }
     }
 
     Ok(())
+}
+
+fn ask_agent() -> anyhow::Result<String> {
+    println!("Which coding agent are you using? [claude/codex/none]:");
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line)?;
+    let choice = line.trim().to_string();
+    Ok(if choice.is_empty() {
+        "none".to_string()
+    } else {
+        choice
+    })
+}
+
+fn flag_value(args: &[String], flag: &str) -> Option<String> {
+    args.iter()
+        .position(|a| a == flag)
+        .and_then(|i| args.get(i + 1).cloned())
 }
 
 fn print_flow(flow: ControlFlow, id: &str, thread: &Thread) {

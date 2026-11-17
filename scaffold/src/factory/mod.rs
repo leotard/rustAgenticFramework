@@ -6,6 +6,10 @@
 //! dispatch coding agents. Factor 6 (pause/resume) and factor 7 (contact humans)
 //! gate the one high-stakes action — the merge — on a human's approval.
 //! Opening a PR is routine and needs no approval.
+//!
+//! Two concerns are kept separate:
+//! - `GitHub` (this file): git/gh operations — branch, PR, merge.
+//! - `Dispatcher` ([`dispatcher`]): invoking the coding agent for a stage.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -14,6 +18,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::AgentError;
 use crate::runtime::ControlFlow;
+
+pub mod dispatcher;
+
+pub use dispatcher::{
+    dispatcher_from_choice, ClaudeCode, Codex, Dispatcher, DryRunDispatcher, ManualDispatcher,
+};
 
 /// The pipeline stages. Opening a PR is routine; merging is high-stakes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,10 +103,9 @@ impl Feature {
     }
 }
 
-/// Factor 4 — the factory's tools return structured results, not side effects.
+/// Factor 4 — git/gh operations return structured results, not side effects.
 pub trait GitHub {
     fn create_branch(&self, feature: &Feature) -> Result<(), AgentError>;
-    fn dispatch_agent(&self, stage: &Stage, feature: &Feature) -> Result<(), AgentError>;
     fn open_pr(&self, feature: &Feature) -> Result<String, AgentError>;
     fn merge_pr(&self, feature: &Feature) -> Result<(), AgentError>;
 }
@@ -107,18 +116,6 @@ pub struct GitHubCli;
 impl GitHub for GitHubCli {
     fn create_branch(&self, feature: &Feature) -> Result<(), AgentError> {
         run_cmd("git", &["switch", "-c", &feature.branch]).map(|_| ())
-    }
-
-    fn dispatch_agent(&self, stage: &Stage, feature: &Feature) -> Result<(), AgentError> {
-        // In production, invoke your coding agent (Claude Code / Codex / a
-        // subagent) here with the stage's prompt. The scaffold logs instead.
-        eprintln!(
-            "[factory] dispatch {} agent for feature {} ({})",
-            stage.label(),
-            feature.id,
-            feature.title
-        );
-        Ok(())
     }
 
     fn open_pr(&self, feature: &Feature) -> Result<String, AgentError> {
@@ -165,15 +162,6 @@ pub struct StubGitHub;
 impl GitHub for StubGitHub {
     fn create_branch(&self, feature: &Feature) -> Result<(), AgentError> {
         eprintln!("[factory] would create branch {}", feature.branch);
-        Ok(())
-    }
-
-    fn dispatch_agent(&self, stage: &Stage, feature: &Feature) -> Result<(), AgentError> {
-        eprintln!(
-            "[factory] would dispatch {} agent for feature {}",
-            stage.label(),
-            feature.id
-        );
         Ok(())
     }
 
@@ -231,7 +219,11 @@ impl FeatureStore {
 
 /// The orchestrator loop (factor 8). Drives a feature through its stages,
 /// pausing only for the high-stakes merge (factor 7).
-pub fn run_pipeline(feature: &mut Feature, github: &dyn GitHub) -> Result<ControlFlow, AgentError> {
+pub fn run_pipeline(
+    feature: &mut Feature,
+    github: &dyn GitHub,
+    dispatcher: &dyn Dispatcher,
+) -> Result<ControlFlow, AgentError> {
     loop {
         let stage = match feature.next_stage() {
             Some(s) => s,
@@ -251,13 +243,13 @@ pub fn run_pipeline(feature: &mut Feature, github: &dyn GitHub) -> Result<Contro
             }
             Stage::Implement => {
                 github.create_branch(feature)?;
-                github.dispatch_agent(&stage, feature)?;
+                dispatcher.dispatch(&stage, feature)?;
             }
             Stage::Merge => {
                 github.merge_pr(feature)?;
             }
             _ => {
-                github.dispatch_agent(&stage, feature)?;
+                dispatcher.dispatch(&stage, feature)?;
             }
         }
 
